@@ -1,5 +1,7 @@
 spec.md
 uv.lock
+b.txt
+cr1.md
 
 # OS/editor noise
 .DS_Store
@@ -35,3 +37,5 @@ tmp/
 temp/
 *.tmp
 *.temp
+documents/review_implementation_plan.md
+documents/review.md

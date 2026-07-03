@@ -22,9 +22,21 @@ def brightsky_get(path: str, params: dict[str, Any], *, optional: bool = False) 
         status = exc.response.status_code
         details = f"GET {exc.request.url} returned HTTP {status}"
         if status == 404:
-            raise DwdWeatherError("NO_DATA", "No data available for this request.", 4, details) from exc
+            raise DwdWeatherError(
+                "NO_DATA",
+                "No data available for this request.",
+                4,
+                details,
+                suggestion="Check the location and date range, or list nearby stations with `dwdweather stations`.",
+            ) from exc
         if status == 429:
-            raise DwdWeatherError("RATE_LIMITED", "Rate limit exceeded. Please try again later.", 1, details) from exc
+            raise DwdWeatherError(
+                "RATE_LIMITED",
+                "Rate limit exceeded. Please try again later.",
+                1,
+                details,
+                suggestion="Wait and retry; consider reducing request frequency.",
+            ) from exc
         if 500 <= status < 600:
             raise DwdWeatherError(
                 "SERVICE_UNAVAILABLE",

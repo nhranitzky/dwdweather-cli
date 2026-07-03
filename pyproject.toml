@@ -1,7 +1,7 @@
 [project]
-name = "dwdweather-dev"
+name = "dwdweather-skill"
 version = "1.0.0"
-description = "Development harness for dwdweather CLI"
+description = "Skill export harness for dwdweather"
 requires-python = ">=3.11"
 dependencies = [
     "dwdweather",
@@ -12,6 +12,7 @@ dependencies = [
 
 [tool.uv]
 package = false
+dev-dependencies = ["tiktoken>=0.7"]
 
 [tool.uv.sources]
 dwdweather = { path = "dwdweather", editable = true }

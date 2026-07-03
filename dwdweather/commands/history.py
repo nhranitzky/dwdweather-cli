@@ -1,24 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, time
-from typing import Annotated, Any
+from typing import Annotated
 
 import typer
-from rich.table import Table
 
 from dwdweather.api import brightsky_get
 from dwdweather.errors import DwdWeatherError
-from dwdweather.render import (
-    add_hourly_row,
-    console,
-    echo_json,
-    fmt_humidity,
-    fmt_precip,
-    fmt_sunshine,
-    fmt_temp,
-    fmt_wind,
-    make_hourly_table,
-)
+from dwdweather.render import echo_json, echo_toon, render_history_daily, render_history_hourly
 from dwdweather.weather import aggregate_daily
 
 from .common import (
@@ -29,19 +18,26 @@ from .common import (
     meta,
     parse_date,
     resolve_location,
+    resolve_output,
     resolve_tz,
 )
+
+MAX_HOURLY_RECORDS = 366 * 24
 
 
 def history(
     location: LocationArgument,
-    date_value: Annotated[str, typer.Option("--date", "-d", help="Start date, YYYY-MM-DD.")],
-    end_date: Annotated[str | None, typer.Option("--end-date", "-e", help="Inclusive end date, YYYY-MM-DD.")] = None,
+    date_value: Annotated[str, typer.Option("--date", help="Start date, YYYY-MM-DD.")],
+    end_date: Annotated[str | None, typer.Option("--end-date", help="Inclusive end date, YYYY-MM-DD.")] = None,
     daily: Annotated[bool, typer.Option("--daily", help="Show daily aggregate rows.")] = False,
     tz: Annotated[str | None, typer.Option("--tz", envvar="DWDWEATHER_TZ", help="Timezone for timestamps.")] = None,
-    output: OutputOption = OutputFormat.text,
+    limit: Annotated[
+        int, typer.Option("--limit", min=1, help="Maximum number of hourly records to return.")
+    ] = MAX_HOURLY_RECORDS,
+    output: OutputOption = None,
 ) -> None:
     """Query historical weather observations for LOCATION."""
+    output = resolve_output(output)
     timezone = resolve_tz(tz)
     start_date = parse_date(date_value, "--date")
     final_date = parse_date(end_date, "--end-date") if end_date else start_date
@@ -66,66 +62,37 @@ def history(
         )
         records = (data or {}).get("weather", [])
         if not records:
-            raise DwdWeatherError("NO_DATA", "No historical data available for this location and date range.", 4)
+            raise DwdWeatherError(
+                "NO_DATA",
+                "No historical data available for this location and date range.",
+                4,
+                suggestion="Check the location and date range, or list nearby stations with `dwdweather stations`.",
+            )
         sources = (data or {}).get("sources") or []
+        truncated = len(records) > limit
+        if truncated:
+            records = records[:limit]
         mode = "daily" if daily else "hourly"
         payload_records = aggregate_daily(records) if daily else records
         period = date_value if not end_date else f"{date_value} to {end_date}"
-        if output == OutputFormat.json:
-            echo_json(
-                {
-                    "meta": meta("history", mode, timezone),
-                    "location": place,
-                    "data": {
-                        "period": period,
-                        "sources": sources,
-                        "records": payload_records,
-                    },
-                }
-            )
+        if output in (OutputFormat.json, OutputFormat.toon):
+            payload = {
+                "meta": meta("history", mode, timezone, truncated=truncated),
+                "location": place,
+                "data": {
+                    "period": period,
+                    "sources": sources,
+                    "records": payload_records,
+                },
+            }
+            if output == OutputFormat.toon:
+                echo_toon(payload)
+            else:
+                echo_json(payload)
             return
         if daily:
-            _render_daily(place["short_name"], period, payload_records, sources)
+            render_history_daily(place["short_name"], period, payload_records, sources, truncated=truncated)
         else:
-            _render_hourly(place["short_name"], period, records, sources)
+            render_history_hourly(place["short_name"], period, records, sources, truncated=truncated)
     except DwdWeatherError as exc:
         handle_error(exc, output)
-
-
-def _render_hourly(label: str, period: str, records: list[dict[str, Any]], sources: list[dict[str, Any]]) -> None:
-    table = make_hourly_table(f"Historical Weather - {label} [{period}]")
-    for record in records:
-        add_hourly_row(table, record)
-    console.print(table)
-    console.print(f"[dim]{_source_footer(sources)} | {len(records)} records[/]")
-
-
-def _render_daily(label: str, period: str, rows: list[dict[str, Any]], sources: list[dict[str, Any]]) -> None:
-    table = Table(title=f"Historical Daily Summary - {label} [{period}]", show_header=True, header_style="bold cyan")
-    table.add_column("Date", no_wrap=True)
-    table.add_column("Low", justify="right")
-    table.add_column("High", justify="right")
-    table.add_column("Avg", justify="right")
-    table.add_column("Rain", justify="right")
-    table.add_column("Wind", justify="right")
-    table.add_column("Avg RH", justify="right")
-    table.add_column("Sunshine", justify="right")
-    for row in rows:
-        table.add_row(
-            row["date"],
-            fmt_temp(row["temperature_min"]),
-            fmt_temp(row["temperature_max"]),
-            fmt_temp(row["temperature_avg"]),
-            fmt_precip(row["precipitation_total"]),
-            fmt_wind(row["wind_speed_avg"]),
-            fmt_humidity(row["relative_humidity_avg"]),
-            fmt_sunshine(row["sunshine_total"]),
-        )
-    console.print(table)
-    console.print(f"[dim]{_source_footer(sources)}[/]")
-
-
-def _source_footer(sources: list[dict[str, Any]]) -> str:
-    stations = sorted({source.get("station_name") or "?" for source in sources})
-    observation_types = sorted({source.get("observation_type") or "?" for source in sources})
-    return f"Stations: {', '.join(stations)} | Observation types: {', '.join(observation_types)}"

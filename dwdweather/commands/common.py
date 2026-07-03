@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from datetime import date, datetime
 from enum import StrEnum
 from typing import Annotated, Any
@@ -16,6 +17,7 @@ from dwdweather.render import generated_at
 class OutputFormat(StrEnum):
     text = "text"
     json = "json"
+    toon = "toon"
 
 
 LocationArgument = Annotated[
@@ -24,9 +26,19 @@ LocationArgument = Annotated[
 ]
 
 OutputOption = Annotated[
-    OutputFormat,
-    typer.Option("--output", case_sensitive=False, help="Output format."),
+    OutputFormat | None,
+    typer.Option(
+        "--output",
+        case_sensitive=False,
+        help="Output format. Default: text in an interactive terminal, json otherwise.",
+    ),
 ]
+
+
+def resolve_output(value: OutputFormat | None) -> OutputFormat:
+    if value is not None:
+        return value
+    return OutputFormat.text if sys.stdout.isatty() else OutputFormat.json
 
 
 def resolve_location(tokens: list[str]) -> Location:
@@ -45,7 +57,7 @@ def resolve_tz(value: str | None) -> str:
     return tz
 
 
-def meta(command: str, mode: str, timezone: str | None = None) -> dict[str, Any]:
+def meta(command: str, mode: str, timezone: str | None = None, *, truncated: bool = False) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "command": command,
         "mode": mode,
@@ -53,6 +65,8 @@ def meta(command: str, mode: str, timezone: str | None = None) -> dict[str, Any]
     }
     if timezone is not None:
         payload["timezone"] = timezone
+    if truncated:
+        payload["truncated"] = True
     return payload
 
 

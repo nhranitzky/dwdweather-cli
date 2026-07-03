@@ -50,7 +50,12 @@ def geocode_location(query: str) -> Location:
         raise DwdWeatherError("GEOCODING_ERROR", "Geocoding service returned invalid JSON.", 1, str(exc)) from exc
 
     if not results:
-        raise DwdWeatherError("LOCATION_NOT_FOUND", f"Location not found in Germany: {query!r}.", 3)
+        raise DwdWeatherError(
+            "LOCATION_NOT_FOUND",
+            f"Location not found in Germany: {query!r}.",
+            3,
+            suggestion="Check the spelling, or use a nearby larger town/city.",
+        )
 
     location = _normalize_location(query, results[0])
     set_cached("geo", normalized_key, dict(location))

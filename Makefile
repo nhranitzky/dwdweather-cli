@@ -1,4 +1,4 @@
-.PHONY: help install sync test lint format typecheck check build clean run
+.PHONY: help install sync test lint format typecheck check build clean run benchmark
 
 help:
 	@grep -E '^[a-zA-Z_-]+:' Makefile
@@ -36,3 +36,6 @@ clean:
 
 run:
 	uv run --project dwdweather dwdweather $(ARGS)
+
+benchmark:
+	uv run python benchmark_size.py
