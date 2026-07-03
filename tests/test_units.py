@@ -11,7 +11,7 @@ from dwdweather import cache, geocode, toon
 from dwdweather.api import brightsky_get
 from dwdweather.commands.alerts import sort_alerts
 from dwdweather.commands.common import OutputFormat, resolve_output
-from dwdweather.errors import DwdWeatherError
+from dwdweather.errors import KNOWN_ERRORS, DwdWeatherError
 from dwdweather.render import fmt_visibility, fmt_wind, weather_icon
 from dwdweather.weather import aggregate_daily
 
@@ -363,3 +363,25 @@ def test_toon_cli_main_invalid_json_exits_1(tmp_path: Path) -> None:
     with pytest.raises(SystemExit) as exc:
         toon.main([str(input_path)])
     assert exc.value.code == 1
+
+
+# Every DwdWeatherError("<CODE>", ...) raise site in the codebase, kept in sync manually.
+ACTUALLY_RAISED_ERROR_CODES = {
+    "NO_DATA",
+    "LOCATION_NOT_FOUND",
+    "RATE_LIMITED",
+    "NETWORK_ERROR",
+    "SERVICE_UNAVAILABLE",
+    "API_ERROR",
+    "GEOCODING_ERROR",
+}
+
+
+def test_known_errors_catalog_covers_all_raised_codes() -> None:
+    assert ACTUALLY_RAISED_ERROR_CODES <= set(KNOWN_ERRORS.keys())
+
+
+def test_known_errors_catalog_entries_have_required_fields() -> None:
+    for code, entry in KNOWN_ERRORS.items():
+        assert isinstance(code, str) and code
+        assert set(entry.keys()) == {"message", "exit_code", "recoverable", "suggested_action"}

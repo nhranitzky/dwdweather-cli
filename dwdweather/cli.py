@@ -3,7 +3,7 @@ from __future__ import annotations
 import typer
 
 from . import __version__
-from .commands import alerts, current, discovery, forecast, history, stations, summary
+from .commands import alerts, current, describe, forecast, history, stations, summary
 from .config import runtime
 
 app = typer.Typer(
@@ -43,4 +43,4 @@ app.command()(history.history)
 app.command()(alerts.alerts)
 app.command()(stations.stations)
 app.command()(summary.summary)
-app.add_typer(discovery.commands_app, name="commands")
+app.command("describe")(describe.describe)

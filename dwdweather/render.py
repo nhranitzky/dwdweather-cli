@@ -370,28 +370,3 @@ def render_alerts(municipality: str, warn_cell: str, alert_list: list[dict[str, 
         console.print(
             Panel(body, title=f"{icon} [{color}]{str(headline).upper()}[/]", border_style=color, expand=False)
         )
-
-
-def _flag_summary(param: dict[str, Any]) -> str:
-    flag = str(param["flags"][0])
-    if param["type"] == "choice":
-        return f"{flag} [{'|'.join(param.get('choices', []))}]"
-    if param["type"] == "boolean":
-        return flag
-    return f"{flag} {param['type'].upper()}"
-
-
-def render_commands(commands: list[dict[str, Any]]) -> None:
-    table = Table(title="Available Commands", show_header=True, header_style="bold cyan")
-    table.add_column("Command", style="bold", no_wrap=True)
-    table.add_column("Help")
-    table.add_column("Arguments", no_wrap=True)
-    table.add_column("Options")
-    for command in commands:
-        arguments = ", ".join(
-            f"{arg['name'].upper()}..." if arg["variadic"] else arg["name"].upper() for arg in command["arguments"]
-        )
-        options = ", ".join(_flag_summary(option) for option in command["options"])
-        table.add_row(command["name"], command["help"], arguments, options)
-    console.print(table)
-    console.print(f"[dim]{len(commands)} command(s). Use --output json for full option details.[/]")

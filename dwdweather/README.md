@@ -15,7 +15,7 @@ dwdweather history   LOCATION... --date YYYY-MM-DD [--end-date YYYY-MM-DD] [--da
 dwdweather alerts    LOCATION... [--output text|json|toon]
 dwdweather stations  LOCATION... [--radius KM] [--limit N] [--output text|json|toon]
 dwdweather summary   LOCATION... [--days N] [--tz TZ] [--output text|json|toon]
-dwdweather commands list [--output text|json|toon]
+dwdweather describe  [COMMAND] [--format markdown|json]
 ```
 
 All weather commands require a German location name. Multi-word locations may be passed unquoted.
@@ -175,30 +175,41 @@ Options:
 - `--days`: `1..10`, default `5`
 - `--tz`: timezone, default `Europe/Berlin` or `DWDWEATHER_TZ`
 
-### `commands list`
+### `describe`
 
-Machine-readable command discovery: lists every weather command with its arguments and options (flags, type, required/default, choices, env var), without needing to parse `--help` text. Intended for agents introspecting this CLI programmatically.
+Machine-readable self-description of this CLI: a single metadata source rendered as either Markdown (default, for humans/LLMs reading docs) or JSON (for scripts/agents). Intended for agents that need to introspect this CLI programmatically instead of parsing `--help` text.
+
+```bash
+dwdweather describe                      # full Markdown overview of the CLI and all commands
+dwdweather describe --format json        # same content as structured JSON
+dwdweather describe history              # Markdown description of a single command
+dwdweather describe history --format json
+```
+
+The `--format` flag (`markdown` default, or `json`) is independent from `--output`, which controls how *weather data* is rendered, not how the CLI *describes itself*.
+
+Root JSON structure:
 
 ```json
 {
-  "meta": {"command": "commands", "mode": "list", "generated_at": "..."},
-  "data": {
-    "commands": [
-      {
-        "name": "current",
-        "help": "Show current weather for LOCATION.",
-        "arguments": [
-          {"name": "location", "required": true, "variadic": true, "type": "string", "help": "..."}
-        ],
-        "options": [
-          {"flags": ["--tz"], "type": "string", "required": false, "default": null, "help": "...", "envvar": "DWDWEATHER_TZ"},
-          {"flags": ["--output"], "type": "choice", "required": false, "default": null, "help": "...", "choices": ["text", "json", "toon"]}
-        ]
-      }
-    ]
-  }
+  "schema_version": "1.0",
+  "kind": "cli.describe",
+  "name": "dwdweather",
+  "version": "1.0.0",
+  "summary": "...",
+  "description": "...",
+  "global_options": [],
+  "commands": [],
+  "environment_variables": [{"name": "DWDWEATHER_TZ", "required": false, "default": "Europe/Berlin", "description": "..."}],
+  "config_files": [],
+  "authentication": null,
+  "output_formats": ["text", "json", "toon"]
 }
 ```
+
+Each entry in `commands` (and the object returned by `describe <command> --format json`) includes `summary`, `description`, `usage`, `arguments`, `options`, `examples`, `preconditions`, `effects`, `safety`, `output` (incl. a JSON schema of the command's response), `exit_codes`, `errors`, `idempotent`, `mutates_state`, `requires_network`, and `supports_dry_run`. All `dwdweather` commands are read-only network calls that also write to the local geocoding cache; none are destructive or support `--dry-run`.
+
+`describe <command>` with an unknown command name exits `2` and suggests running `dwdweather describe` to list all commands.
 
 ## Caveats
 
