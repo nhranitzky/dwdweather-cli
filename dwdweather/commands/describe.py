@@ -3,7 +3,6 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Annotated, Any
 
-import click
 import typer
 
 from dwdweather import __version__
@@ -112,19 +111,30 @@ class DescribeFormat(StrEnum):
     json = "json"
 
 
-def _type_name(param_type: click.ParamType) -> str:
-    if isinstance(param_type, click.Choice):
+# Typer builds its command tree on top of Click, but which Click implementation backs it
+# (the standalone `click` package vs. a version that vendors its own copy internally) has
+# changed across Typer releases. Introspecting via `isinstance(p, click.Argument)` against
+# either implementation is therefore version-fragile. Click's Parameter/ParamType objects
+# expose the same small, stable attribute surface (`param_type_name`, `.type.name`,
+# `.context_class`, `hasattr(..., "choices"/"min"/"max"/"commands")`) regardless of which
+# Click flavor Typer uses underneath, so duck typing on those attributes is used instead of
+# importing `click` directly.
+
+
+def _type_name(param_type: Any) -> str:
+    if hasattr(param_type, "choices"):
         return "choice"
-    if isinstance(param_type, click.types.BoolParamType):
+    name = str(getattr(param_type, "name", ""))
+    if name == "boolean":
         return "boolean"
-    if isinstance(param_type, click.types.IntParamType):
+    if "integer" in name:
         return "integer"
-    if isinstance(param_type, click.types.FloatParamType):
+    if "float" in name:
         return "number"
     return "string"
 
 
-def _argument_schema(param: click.Argument) -> dict[str, Any]:
+def _argument_schema(param: Any) -> dict[str, Any]:
     return {
         "name": param.name,
         "aliases": [],
@@ -141,15 +151,15 @@ def _argument_schema(param: click.Argument) -> dict[str, Any]:
     }
 
 
-def _option_schema(param: click.Option) -> dict[str, Any]:
-    enum = list(param.type.choices) if isinstance(param.type, click.Choice) else None
+def _option_schema(param: Any) -> dict[str, Any]:
+    choices = getattr(param.type, "choices", None)
     schema: dict[str, Any] = {
         "name": param.opts[0],
         "aliases": list(param.opts[1:]),
         "type": _type_name(param.type),
         "required": bool(param.required),
         "default": param.default,
-        "enum": enum,
+        "enum": list(choices) if choices is not None else None,
         "description": param.help,
         "examples": [],
         "sensitive": False,
@@ -158,20 +168,20 @@ def _option_schema(param: click.Option) -> dict[str, Any]:
     }
     if param.envvar:
         schema["envvar"] = param.envvar
-    if isinstance(param.type, click.types.IntRange | click.types.FloatRange):
+    if hasattr(param.type, "min") and hasattr(param.type, "max"):
         schema["min"] = param.type.min
         schema["max"] = param.type.max
     return schema
 
 
-def _usage(name: str, command: click.Command) -> str:
-    ctx = click.Context(command, info_name=f"dwdweather {name}")
-    return command.get_usage(ctx).removeprefix("Usage: ")
+def _usage(name: str, command: Any) -> str:
+    ctx = command.context_class(command, info_name=f"dwdweather {name}")
+    return str(command.get_usage(ctx)).removeprefix("Usage: ")
 
 
-def _command_schema(name: str, command: click.Command) -> dict[str, Any]:
-    arguments = [_argument_schema(p) for p in command.params if isinstance(p, click.Argument)]
-    options = [_option_schema(p) for p in command.params if isinstance(p, click.Option)]
+def _command_schema(name: str, command: Any) -> dict[str, Any]:
+    arguments = [_argument_schema(p) for p in command.params if getattr(p, "param_type_name", None) == "argument"]
+    options = [_option_schema(p) for p in command.params if getattr(p, "param_type_name", None) == "option"]
     summary = (command.help or command.short_help or "").strip()
     data_schema = {
         "type": "object",
@@ -207,16 +217,16 @@ def _command_schema(name: str, command: click.Command) -> dict[str, Any]:
     }
 
 
-def _weather_commands() -> dict[str, click.Command]:
+def _weather_commands() -> dict[str, Any]:
     from dwdweather.cli import app  # deferred import breaks the cli.py <-> describe.py import cycle
 
     root = typer.main.get_command(app)
-    if not isinstance(root, click.Group):
+    if not hasattr(root, "commands"):
         return {}
     return {
         name: command
         for name, command in root.commands.items()
-        if not isinstance(command, click.Group) and name != "describe"
+        if not hasattr(command, "commands") and name != "describe"
     }
 
 
@@ -224,7 +234,9 @@ def build_root_description() -> dict[str, Any]:
     from dwdweather.cli import app  # deferred import breaks the cli.py <-> describe.py import cycle
 
     root = typer.main.get_command(app)
-    global_options = [_option_schema(p) for p in root.params if isinstance(p, click.Option)] if root.params else []
+    global_options = [
+        _option_schema(p) for p in root.params if getattr(p, "param_type_name", None) == "option"
+    ]
     summary = (root.help or "").strip()
     commands = [_command_schema(name, command) for name, command in sorted(_weather_commands().items())]
     return {
